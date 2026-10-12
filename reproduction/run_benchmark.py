@@ -94,7 +94,7 @@ except Exception as e:
          print("  Embeddings already exist, skipping.")
     
     # Define all methods
-    # Include: No Augmentation, Baselines (XGB, DT), Augmentation Baselines, TASER-AE, Generative
+    # Include: No Augmentation, tree baselines, augmentation baselines, TASER-AE, generative
     AUGMENTATION_METHODS = [
         "random_swap", "shuffle", "random_drop",
         "synonym_replacement", "synonym_insertion",
@@ -105,7 +105,7 @@ except Exception as e:
     
     print("\n[Step 3] Running benchmark...")
     
-    total_jobs = len(seeds) * (len(AUGMENTATION_METHODS) + 4) # +3 for No_Aug, XGB, DT
+    total_jobs = len(seeds) * (len(AUGMENTATION_METHODS) + 4) # + no augmentation and three tree baselines
     job_idx = 1
     
     for seed in seeds:
@@ -136,17 +136,17 @@ except Exception as e:
             print("    SKIPPED (exists)")
         job_idx += 1
             
-        # 2. XGBoost Baseline
-        print(f"  [{job_idx}/{total_jobs}] Running baseline_xgboost (seed={seed})...")
-        metrics_file_xgb = os.path.join(log_dir, f"metrics_baseline_xgboost_{args.strategy}_seed{seed}.json")
-        if not os.path.exists(metrics_file_xgb):
+        # 2. Gradient Boosting Baseline
+        print(f"  [{job_idx}/{total_jobs}] Running baseline_gradient_boosting (seed={seed})...")
+        metrics_file_gb = os.path.join(log_dir, f"metrics_baseline_gradient_boosting_{args.strategy}_seed{seed}.json")
+        if not os.path.exists(metrics_file_gb):
             # Pass save_metrics argument
             subprocess.run([
-                "python3", "baseline_xgboost.py",
+                "python3", "baseline_gradient_boosting.py",
                 "--train_file", train_file,
                 "--test_file", test_file,
                 "--seed", str(seed),
-                "--save_metrics", metrics_file_xgb
+                "--save_metrics", metrics_file_gb
             ], check=True)
         else:
             print("    SKIPPED (exists)")
@@ -206,8 +206,7 @@ except Exception as e:
                 
                 # Embeddings required?
                 if method in ["synonym_replacement", "synonym_insertion", "ishikawa", 
-                              "composite_insertion", "taser_ae",
-                              "taser_ae"]:
+                              "composite_insertion", "taser_ae"]:
                     aug_cmd.extend(["--embeddings", embed_file])
                     
                 # GAN/VAE require device (epochs default)
@@ -255,7 +254,7 @@ except Exception as e:
             
     print("\n" + "=" * 60)
     print("Benchmark Completed.")
-    print("Run 'python3 aggregate_results.py' to see aggregated results.")
+    print("Run 'python3 comprehensive_aggregate.py --log_dir log --out comprehensive_1x.csv' to aggregate.")
     print("=" * 60)
 
 if __name__ == "__main__":

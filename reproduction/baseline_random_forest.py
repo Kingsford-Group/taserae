@@ -18,8 +18,8 @@ import os
 import sys
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GridSearchCV
-from sklearn.metrics import f1_score, precision_score, recall_score
-from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import f1_score, precision_score, recall_score, roc_auc_score, average_precision_score
+from sklearn.preprocessing import LabelEncoder, label_binarize
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import augment_utils
@@ -43,7 +43,8 @@ def main():
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--save_metrics", type=str, default="metrics_random_forest_baseline.json")
     parser.add_argument("--n_estimators", type=int, default=100, help="Number of trees")
-    parser.add_argument("--use_gridsearch", action="store_true", help="Use GridSearchCV (slower)")
+    parser.add_argument("--no_gridsearch", dest="use_gridsearch", action="store_false",
+                        help="Skip GridSearchCV and use default hyperparameters")
     args = parser.parse_args()
     
     augment_utils.seed_everything(args.seed)
@@ -139,13 +140,19 @@ def main():
     
     # Evaluate
     y_pred = model.predict(X_test)
-    
+    # Probabilities for AUC-ROC / AUPR (one-vs-rest), aligned to all encoded class ids
+    proba = model.predict_proba(X_test)
+    n_classes = len(le.classes_)
+    proba_full = np.zeros((len(y_test), n_classes))
+    for col, cls_id in enumerate(model.classes_):
+        proba_full[:, cls_id] = proba[:, col]
+
     metrics = {}
     metrics['f1_macro'] = f1_score(y_test, y_pred, average='macro', zero_division=0)
     metrics['f1_micro'] = f1_score(y_test, y_pred, average='micro', zero_division=0)
     metrics['prec_macro'] = precision_score(y_test, y_pred, average='macro', zero_division=0)
     metrics['rec_macro'] = recall_score(y_test, y_pred, average='macro', zero_division=0)
-    
+
     # Per-class metrics
     for idx, label in enumerate(le.classes_):
         y_true_bin = (y_test == idx).astype(int)
@@ -153,6 +160,26 @@ def main():
         metrics[f'f1_{label}'] = f1_score(y_true_bin, y_pred_bin, zero_division=0)
         metrics[f'prec_{label}'] = precision_score(y_true_bin, y_pred_bin, zero_division=0)
         metrics[f'rec_{label}'] = recall_score(y_true_bin, y_pred_bin, zero_division=0)
+        if y_true_bin.sum() == 0 or y_true_bin.sum() == len(y_true_bin):
+            auc = ap = float('nan')
+        else:
+            auc = roc_auc_score(y_true_bin, proba_full[:, idx])
+            ap = average_precision_score(y_true_bin, proba_full[:, idx])
+        metrics[f'auc_{label}'] = auc
+        metrics[f'ap_{label}'] = ap
+
+    # Macro / micro AUC-ROC and AUPR
+    metrics['auc_macro'] = float(np.nanmean([metrics[f'auc_{l}'] for l in le.classes_]))
+    metrics['ap_macro'] = float(np.nanmean([metrics[f'ap_{l}'] for l in le.classes_]))
+    Yb = label_binarize(y_test, classes=list(range(n_classes)))
+    try:
+        metrics['auc_micro'] = float(roc_auc_score(Yb, proba_full, average='micro'))
+    except Exception:
+        metrics['auc_micro'] = float('nan')
+    try:
+        metrics['ap_micro'] = float(average_precision_score(Yb, proba_full, average='micro'))
+    except Exception:
+        metrics['ap_micro'] = float('nan')
     
     print("-" * 50)
     print(f"Macro F1: {metrics['f1_macro']:.4f}")

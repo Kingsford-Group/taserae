@@ -73,12 +73,19 @@ def main():
     parser.add_argument("--test_file", type=str, default="test_split.csv", help="Path to test CSV")
     parser.add_argument("--epochs", type=int, default=20, help="Number of epochs") 
     parser.add_argument("--batch_size", type=int, default=1024, help="Batch size")
-    parser.add_argument("--lr", type=float, default=1e-2, help="Learning rate")
+    parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
     parser.add_argument("--num_workers", type=int, default=4, help="Number of dataloader workers")
     parser.add_argument("--save_metrics", type=str, default="metrics.json", help="Path to save metrics")
+    parser.add_argument("--save_preds", type=str, default=None,
+                        help="Path to save test-set probabilities/labels as .npz (for bootstrap/paired statistics)")
     parser.add_argument("--patience", type=int, default=3, help="Early stopping patience")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--device", type=str, default="cuda:0", help="Device to use (e.g., cuda:1)")
+    parser.add_argument(
+        "--notebook_eval_compat",
+        action="store_true",
+        help="Notebook-compatible test binarization: fit a fresh MultiLabelBinarizer on test labels.",
+    )
     
     args = parser.parse_args()
     augment_utils.seed_everything(args.seed)
@@ -121,7 +128,17 @@ def main():
     
     mlb = MultiLabelBinarizer()
     y_train = mlb.fit_transform(y_train_processed)
-    y_test = mlb.transform(y_test_processed)
+    if args.notebook_eval_compat:
+        test_mlb = MultiLabelBinarizer()
+        y_test_raw_bin = test_mlb.fit_transform(y_test_processed)
+        y_test = np.zeros((len(y_test_processed), len(mlb.classes_)), dtype=int)
+        train_class_to_idx = {c: i for i, c in enumerate(mlb.classes_)}
+        for j, c in enumerate(test_mlb.classes_):
+            i = train_class_to_idx.get(c)
+            if i is not None:
+                y_test[:, i] = y_test_raw_bin[:, j]
+    else:
+        y_test = mlb.transform(y_test_processed)
     
     num_classes = y_train.shape[1]
     print(f"Num classes: {num_classes}")
@@ -211,7 +228,7 @@ def main():
     model = TransformerModel(vocab_size, embedding_dim, num_classes)
     model.to(device)
     
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-5)
     criterion = nn.BCEWithLogitsLoss()
     
     # Training Loop
@@ -305,7 +322,11 @@ def main():
             metrics[f'auc_{avg}'] = roc_auc_score(all_labels, all_preds, average=avg)
         except:
             metrics[f'auc_{avg}'] = float('nan')
-            
+        try:
+            metrics[f'ap_{avg}'] = average_precision_score(all_labels, all_preds, average=avg)
+        except:
+            metrics[f'ap_{avg}'] = float('nan')
+
     print("-" * 30)
     print("Aggregate Metrics:")
     print(f"Micro F1: {metrics['f1_micro']:.4f}")
@@ -337,13 +358,31 @@ def main():
             auc = roc_auc_score(true_lbl, prob_lbl)
         except:
             pass
-            
-        print(f"Class: {label} | F1: {f1:.4f} | Prec: {prec:.4f} | Rec: {rec:.4f} | AUC: {auc:.4f}")
+
+        ap = float('nan')
+        try:
+            ap = average_precision_score(true_lbl, prob_lbl)
+        except:
+            pass
+
+        print(f"Class: {label} | F1: {f1:.4f} | Prec: {prec:.4f} | Rec: {rec:.4f} | AUC: {auc:.4f} | AP: {ap:.4f}")
         metrics[f"f1_{label}"] = f1
         metrics[f"prec_{label}"] = prec
         metrics[f"rec_{label}"] = rec
         metrics[f"auc_{label}"] = auc
+        metrics[f"ap_{label}"] = ap
         
+    if args.save_preds:
+        os.makedirs(os.path.dirname(os.path.abspath(args.save_preds)), exist_ok=True)
+        np.savez_compressed(
+            args.save_preds,
+            probs=all_preds.astype(np.float32),
+            labels=all_labels.astype(np.int8),
+            classes=np.array([str(c) for c in mlb.classes_]),
+            threshold=np.float32(threshold),
+        )
+        print(f"Saved test-set predictions to {args.save_preds}")
+
     if args.save_metrics:
         with open(args.save_metrics, 'w') as f:
             # Convert numpy types to native for json

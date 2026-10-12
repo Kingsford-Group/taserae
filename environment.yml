@@ -15,6 +15,3 @@ dependencies:
   - nltk>=3.8
   - tqdm>=4.65
   - matplotlib>=3.7
-  - pip
-  - pip:
-    - xgboost>=1.7

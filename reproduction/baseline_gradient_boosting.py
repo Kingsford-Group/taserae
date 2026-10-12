@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-XGBoost/Gradient Boosting Baseline for TASER-AE Benchmark
+Gradient Boosting Baseline for TASER-AE Benchmark
 
 This script trains a Gradient Boosting classifier on the non-augmented training data
 and evaluates on the test set.
 
 Usage:
-    python3 baseline_xgboost.py --train_file train_pure.csv --test_file test_split.csv \
-        --seed 42 --save_metrics metrics_xgboost_baseline.json
+    python3 baseline_gradient_boosting.py --train_file train_pure.csv --test_file test_split.csv \
+        --seed 42 --save_metrics metrics_gradient_boosting_baseline.json
 """
 
 import pandas as pd
@@ -17,9 +17,8 @@ import json
 import os
 import sys
 from sklearn.ensemble import GradientBoostingClassifier
-from sklearn.model_selection import GridSearchCV
-from sklearn.metrics import f1_score, precision_score, recall_score
-from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import f1_score, precision_score, recall_score, roc_auc_score, average_precision_score
+from sklearn.preprocessing import LabelEncoder, label_binarize
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import augment_utils
@@ -37,19 +36,18 @@ def tokenize_sample(sample):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="XGBoost/Gradient Boosting Baseline")
+    parser = argparse.ArgumentParser(description="Gradient Boosting Baseline")
     parser.add_argument("--train_file", type=str, required=True, help="Path to training CSV")
     parser.add_argument("--test_file", type=str, required=True, help="Path to test CSV")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
-    parser.add_argument("--save_metrics", type=str, default="metrics_xgboost_baseline.json")
+    parser.add_argument("--save_metrics", type=str, default="metrics_gradient_boosting_baseline.json")
     parser.add_argument("--n_estimators", type=int, default=100, help="Number of boosting stages")
-    parser.add_argument("--use_gridsearch", action="store_true", help="Use GridSearchCV (slower)")
     args = parser.parse_args()
     
     augment_utils.seed_everything(args.seed)
     
     print("=" * 50)
-    print("XGBoost/Gradient Boosting Baseline")
+    print("Gradient Boosting Baseline")
     print("=" * 50)
     
     # Load data
@@ -118,37 +116,26 @@ def main():
     
     print(f"Classes: {le.classes_}")
     
-    # Train Gradient Boosting
-    if args.use_gridsearch:
-        print("Training with GridSearchCV...")
-        params_grid = {
-            'n_estimators': [100, 200],
-            'learning_rate': [0.01, 0.1],
-            'max_depth': [5, 10],
-            'min_samples_split': [2, 5],
-            'min_samples_leaf': [1, 5],
-        }
-        gb = GradientBoostingClassifier(random_state=args.seed)
-        grid_search = GridSearchCV(gb, params_grid, scoring='f1_macro', cv=5, verbose=1, n_jobs=4)
-        grid_search.fit(X_train, y_train)
-        model = grid_search.best_estimator_
-        print(f"Best params: {grid_search.best_params_}")
-    else:
-        print(f"Training Gradient Boosting (n_estimators={args.n_estimators})...")
-        model = GradientBoostingClassifier(n_estimators=args.n_estimators, random_state=args.seed)
-        print("DEBUG: Calling fit...")
-        model.fit(X_train, y_train)
-        print("DEBUG: Fit complete.")
+    # Train Gradient Boosting (default hyperparameters)
+    print(f"Training Gradient Boosting (n_estimators={args.n_estimators})...")
+    model = GradientBoostingClassifier(n_estimators=args.n_estimators, random_state=args.seed)
+    model.fit(X_train, y_train)
     
     # Evaluate
     y_pred = model.predict(X_test)
-    
+    # Probabilities for AUC-ROC / AUPR (one-vs-rest), aligned to all encoded class ids
+    proba = model.predict_proba(X_test)
+    n_classes = len(le.classes_)
+    proba_full = np.zeros((len(y_test), n_classes))
+    for col, cls_id in enumerate(model.classes_):
+        proba_full[:, cls_id] = proba[:, col]
+
     metrics = {}
     metrics['f1_macro'] = f1_score(y_test, y_pred, average='macro', zero_division=0)
     metrics['f1_micro'] = f1_score(y_test, y_pred, average='micro', zero_division=0)
     metrics['prec_macro'] = precision_score(y_test, y_pred, average='macro', zero_division=0)
     metrics['rec_macro'] = recall_score(y_test, y_pred, average='macro', zero_division=0)
-    
+
     # Per-class metrics
     for idx, label in enumerate(le.classes_):
         y_true_bin = (y_test == idx).astype(int)
@@ -156,6 +143,26 @@ def main():
         metrics[f'f1_{label}'] = f1_score(y_true_bin, y_pred_bin, zero_division=0)
         metrics[f'prec_{label}'] = precision_score(y_true_bin, y_pred_bin, zero_division=0)
         metrics[f'rec_{label}'] = recall_score(y_true_bin, y_pred_bin, zero_division=0)
+        if y_true_bin.sum() == 0 or y_true_bin.sum() == len(y_true_bin):
+            auc = ap = float('nan')
+        else:
+            auc = roc_auc_score(y_true_bin, proba_full[:, idx])
+            ap = average_precision_score(y_true_bin, proba_full[:, idx])
+        metrics[f'auc_{label}'] = auc
+        metrics[f'ap_{label}'] = ap
+
+    # Macro / micro AUC-ROC and AUPR
+    metrics['auc_macro'] = float(np.nanmean([metrics[f'auc_{l}'] for l in le.classes_]))
+    metrics['ap_macro'] = float(np.nanmean([metrics[f'ap_{l}'] for l in le.classes_]))
+    Yb = label_binarize(y_test, classes=list(range(n_classes)))
+    try:
+        metrics['auc_micro'] = float(roc_auc_score(Yb, proba_full, average='micro'))
+    except Exception:
+        metrics['auc_micro'] = float('nan')
+    try:
+        metrics['ap_micro'] = float(average_precision_score(Yb, proba_full, average='micro'))
+    except Exception:
+        metrics['ap_micro'] = float('nan')
     
     print("-" * 50)
     print(f"Macro F1: {metrics['f1_macro']:.4f}")
