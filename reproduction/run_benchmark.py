@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 TASER-AE Reproduction Benchmark Runner
-Runs 1X augmentation benchmark with seeds [6, 35, 81] on a single GPU.
+Runs 1X augmentation benchmark with seeds [6, 42, 81] on a single GPU.
 
 Usage:
     python3 run_benchmark.py --data /path/to/mimic4_label.csv --device cuda:0
@@ -17,21 +17,24 @@ def main():
     parser = argparse.ArgumentParser(description="Run TASER-AE Benchmark")
     parser.add_argument("--data", type=str, required=True, help="Path to mimic4_label.csv")
     parser.add_argument("--device", type=str, default="cuda:0", help="GPU device (e.g., cuda:0)")
-    parser.add_argument("--seeds", type=str, default="6,35,81", help="Comma-separated seeds")
+    parser.add_argument("--seeds", type=str, default="6,42,81", help="Comma-separated seeds")
     parser.add_argument("--multiplier", type=int, default=1, help="Augmentation multiplier (1 for 1X/Doubling)")
     parser.add_argument("--strategy", type=str, default="Target_Multiplier_1X", help="Strategy name")
     parser.add_argument("--epochs", type=int, default=15, help="Training epochs")
     parser.add_argument("--batch_size", type=int, default=512, help="Batch size")
     parser.add_argument("--patience", type=int, default=3, help="Early stopping patience")
+    parser.add_argument("--notebook_eval_compat", action="store_true", help="Use notebook-compatible test label binarization in classifier evaluation")
     parser.add_argument("--skip_prep", action="store_true", help="Skip data preparation if already done")
-    parser.add_argument("--cv", action="store_true", help="Run with 5-fold CV (5 seeds: 6,35,81,42,100)")
+    parser.add_argument("--cv", action="store_true", help="Run with 5-fold CV (5 seeds: 6,42,81,42,100)")
     args = parser.parse_args()
     
     if args.cv:
-        seeds = [6, 35, 81]
+        seeds = [6, 42, 81]
         print(f"Running in 5-fold CV mode with seeds: {seeds}")
     else:
-        seeds = [6]
+        seeds = [int(s.strip()) for s in args.seeds.split(",") if s.strip()]
+        if not seeds:
+            seeds = [6, 42, 81]
         
     script_dir = os.path.dirname(os.path.abspath(__file__))
     os.chdir(script_dir)
@@ -96,7 +99,7 @@ except Exception as e:
         "random_swap", "shuffle", "random_drop",
         "synonym_replacement", "synonym_insertion",
         "ishikawa", "composite_insertion",
-        "taser_ae_random", "taser_ae_native",
+        "taser_ae",
         "gan", "vae"
     ]
     
@@ -123,6 +126,8 @@ except Exception as e:
                 "--device", args.device,
                 "--save_metrics", metrics_file
             ]
+            if args.notebook_eval_compat:
+                train_cmd.append("--notebook_eval_compat")
             try:
                 subprocess.run(train_cmd, check=True)
             except subprocess.CalledProcessError as e:
@@ -201,7 +206,8 @@ except Exception as e:
                 
                 # Embeddings required?
                 if method in ["synonym_replacement", "synonym_insertion", "ishikawa", 
-                              "composite_insertion", "taser_ae_random", "taser_ae_native"]:
+                              "composite_insertion", "taser_ae",
+                              "taser_ae"]:
                     aug_cmd.extend(["--embeddings", embed_file])
                     
                 # GAN/VAE require device (epochs default)
@@ -236,6 +242,8 @@ except Exception as e:
                     "--device", args.device,
                     "--save_metrics", metrics_file
                 ]
+                if args.notebook_eval_compat:
+                    train_cmd.append("--notebook_eval_compat")
                 try:
                     subprocess.run(train_cmd, check=True)
                 except subprocess.CalledProcessError as e:

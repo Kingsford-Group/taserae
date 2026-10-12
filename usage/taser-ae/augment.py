@@ -53,14 +53,11 @@ def generate_embeddings(input_file, output_file):
     print(f"Saved embeddings to {output_file}")
     return output_file
 
-def run_augmentation(input_file, output_file, method, multiplier, target, seed, embeddings_file):
+def run_augmentation(input_file, output_file, multiplier, target, seed, embeddings_file):
     """Run TASER-AE augmentation"""
-    print(f"\nRunning TASER-AE ({method}) augmentation...")
+    print("\nRunning TASER-AE augmentation...")
     
-    if method == "native":
-        script = os.path.join(REPRO_DIR, "augment_taser_ae_native.py")
-    else:
-        script = os.path.join(REPRO_DIR, "augment_taser_ae_random.py")
+    script = os.path.join(REPRO_DIR, "augment_taser_ae.py")
     
     # Determine strategy name
     if target is not None:
@@ -83,7 +80,7 @@ def run_augmentation(input_file, output_file, method, multiplier, target, seed, 
         sys.exit(1)
     
     # Find and move the generated file
-    expected_name = f"augmented_ehr_data_taser_ae_{method}_{strategy}.csv"
+    expected_name = f"augmented_ehr_data_taser_ae_{strategy}.csv"
     generated_file = os.path.join(REPRO_DIR, "augmented_ehr_data", expected_name)
     
     if os.path.exists(generated_file):
@@ -142,9 +139,6 @@ Examples:
     # Target specific count per minority class
     python3 augment.py --input train.csv --output augmented.csv --target 5000
 
-    # Use random selection method
-    python3 augment.py --input train.csv --output augmented.csv --multiplier 2.0 --method random
-
     # Augment and train classifier
     python3 augment.py --input train.csv --output augmented.csv --multiplier 1.0 \\
         --train --test test.csv --device cuda:0
@@ -162,8 +156,6 @@ Examples:
                         help="Multiplier for minority samples (1.0 = add 100%% more)")
     parser.add_argument("--target", type=int, default=None,
                         help="Target count per minority class (overrides multiplier)")
-    parser.add_argument("--method", type=str, choices=["native", "random"], default="native",
-                        help="TASER-AE method: native (parallel) or random (selection)")
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed for reproducibility")
     
@@ -195,7 +187,7 @@ Examples:
     print("=" * 60)
     print(f"Input: {input_file}")
     print(f"Output: {output_file}")
-    print(f"Method: TASER-AE ({args.method})")
+    print("Method: TASER-AE")
     if args.target:
         print(f"Target: {args.target} samples per minority class")
     else:
@@ -211,7 +203,7 @@ Examples:
     
     # Run augmentation
     run_augmentation(
-        input_file, output_file, args.method,
+        input_file, output_file,
         args.multiplier, args.target, args.seed, embeddings_file
     )
     

@@ -21,7 +21,7 @@ train_pure = pd.read_csv(os.path.join(DATA_DIR, "train_pure.csv"))
 train_pure["set"] = "real"
 
 # Load augmented data
-aug_file = os.path.join(AUG_DIR, "augmented_ehr_data_taser_ae_native_Target_Multiplier_1X_seed6.csv")
+aug_file = os.path.join(AUG_DIR, "augmented_ehr_data_taser_ae_Target_Multiplier_1X_seed6.csv")
 aug_data = pd.read_csv(aug_file)
 
 # Extract only the new augmented rows (those not in original)
@@ -168,9 +168,9 @@ handles, labels = ax.get_legend_handles_labels()
 ax.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 1.09),
           ncol=min(4, len(labels)), frameon=False, handletextpad=0.4, columnspacing=0.3, borderaxespad=0.0)
 fig.tight_layout(pad=0.05)
-fig.savefig(os.path.join(FIGS_DIR, "tsne_taser_seed6.png"), dpi=300, bbox_inches="tight", pad_inches=0.0)
+fig.savefig(os.path.join(FIGS_DIR, "tsne_taser_ae_seed6.png"), dpi=300, bbox_inches="tight", pad_inches=0.0)
 plt.close(fig)
-print("Saved tsne_taser_seed6.png")
+print("Saved tsne_taser_ae_seed6.png")
 
 # Figure 3: Combined (real vs TASER-AE, NOT colored by class)
 print("Creating Figure 3: Combined...")
@@ -202,5 +202,5 @@ print("Saved tsne_all_seed6.png")
 
 print("\nDone! Generated 3 figures:")
 print("  - tsne_real_seed6.png (real samples, colored by class)")
-print("  - tsne_taser_seed6.png (augmented samples, colored by class)")
+print("  - tsne_taser_ae_seed6.png (augmented samples, colored by class)")
 print("  - tsne_all_seed6.png (real vs augmented, domain markers)")

@@ -61,7 +61,7 @@ python3 run_size_analysis.py
 ```
 
 #### t-SNE Visualization
-Visualizes the feature space distribution of real vs. augmented samples (using TASER-AE Native at 1X).
+Visualizes the feature space distribution of real vs. augmented samples (using TASER-AE at 1X).
 ```bash
 python3 tsne_visualization.py
 # Output: figs/tsne_real_only.png, figs/tsne_augmented.png, figs/tsne_combined.png

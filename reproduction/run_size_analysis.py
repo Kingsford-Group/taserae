@@ -36,7 +36,7 @@ def run_augmentation(multiplier):
     mult_str = f"{int(multiplier)}" if multiplier.is_integer() else f"{multiplier}"
     strategy = f"Target_Multiplier_{mult_str}X_size_seed{SEED}"
     # Output file pattern: augmented_ehr_data_{method}_{strategy}.csv
-    aug_file = os.path.join(SCRIPT_DIR, "augmented_ehr_data", f"augmented_ehr_data_taser_ae_native_{strategy}.csv")
+    aug_file = os.path.join(SCRIPT_DIR, "augmented_ehr_data", f"augmented_ehr_data_taser_ae_{strategy}.csv")
     
     if os.path.exists(aug_file):
         print(f"  Augmented file exists: {aug_file}")
@@ -44,7 +44,7 @@ def run_augmentation(multiplier):
     
     print(f"  Running TASER-AE augmentation with multiplier={multiplier}...")
     cmd = [
-        "python3", os.path.join(SCRIPT_DIR, "augment_taser_ae_native.py"),
+        "python3", os.path.join(SCRIPT_DIR, "augment_taser_ae.py"),
         "--input", TRAIN_FILE,
         "--strategy", strategy,
         "--multiplier", str(multiplier),
@@ -64,7 +64,7 @@ def train_and_evaluate(aug_file, strategy, multiplier):
     
     # Special case: use existing benchmark metrics for 1X
     if multiplier == 1.0:
-        existing_metrics = os.path.join(SCRIPT_DIR, "log", f"metrics_taser_ae_native_Target_Multiplier_1X_seed{SEED}.json")
+        existing_metrics = os.path.join(SCRIPT_DIR, "log", f"metrics_taser_ae_Target_Multiplier_1X_seed{SEED}.json")
         if os.path.exists(existing_metrics):
             print(f"  Using existing benchmark metrics: {existing_metrics}")
             with open(existing_metrics, 'r') as f:
