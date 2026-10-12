@@ -26,3 +26,24 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+
+# --- Data (MIMIC-IV is access-restricted; never commit) ---
+data/processed/
+data/mimic/
+data/athena/
+data/*.csv
+!data/*_ICD.csv
+
+# --- Experiment outputs and intermediate results ---
+**/outputs/
+**/cache/
+reproduction/augmented_ehr_data/
+reproduction/log/
+reproduction/preds/
+reproduction/figs/
+reproduction/*.csv
+
+# --- Logs ---
+**/nohup_logs/
+*.log
+nohup.out
